@@ -1,19 +1,43 @@
 import os
 import telebot
+import subprocess
 
-# Railway পরিবেশ থেকে টোকেন সংগ্রহ করার কমান্ড
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# /start বা /help লিখলে বট যা উত্তর দেবে
 @bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
-    bot.reply_to(message, "হ্যালো! আমি আপনার নতুন বট। আমি সফলভাবে ক্লাউডে রান করছি!")
+    bot.reply_to(message, "হ্যালো! আমাকে যেকোনো ছোট সাইজের APK ফাইল দিন (File/Document হিসেবে), আমি সেটি আনপ্যাক করার চেষ্টা করব।")
 
-# ইউজার কোনো মেসেজ দিলে বট সেটিই রিপ্লাই দেবে
-@bot.message_handler(func=lambda message: True)
-def echo_all(message):
-    bot.reply_to(message, "আপনার মেসেজ পেয়েছি: " + message.text)
+@bot.message_handler(content_types=['document'])
+def handle_apk(message):
+    try:
+        file_name = message.document.file_name
+        if not file_name.endswith('.apk'):
+            bot.reply_to(message, "অনুগ্রহ করে শুধুমাত্র .apk ফাইল দিন।")
+            return
+        
+        bot.reply_to(message, "APK পেয়েছি, ডাউনলোড হচ্ছে...")
+        
+        # টেলিগ্রাম থেকে ফাইল ডাউনলোড
+        file_info = bot.get_file(message.document.file_id)
+        downloaded_file = bot.download_file(file_info.file_path)
+        
+        with open(file_name, 'wb') as new_file:
+            new_file.write(downloaded_file)
+        
+        bot.send_message(message.chat.id, "ডাউনলোড শেষ। আনপ্যাক করা হচ্ছে, দয়া করে অপেক্ষা করুন...")
+        
+        # Apktool দিয়ে আনপ্যাক করার কমান্ড
+        output_folder = file_name.replace('.apk', '_unpacked')
+        result = subprocess.run(["apktool", "d", file_name, "-o", output_folder, "-f"], capture_output=True, text=True)
+        
+        if result.returncode == 0:
+            bot.send_message(message.chat.id, "আনপ্যাক সফল হয়েছে! সার্ভারে ফাইলগুলো সেভ হয়েছে। পরবর্তী ধাপে আমরা এগুলো জিপ (zip) করে পাঠানোর ব্যবস্থা করব।")
+        else:
+            bot.send_message(message.chat.id, f"আনপ্যাক করতে সমস্যা হয়েছে:\n{result.stderr[-200:]}")
+            
+    except Exception as e:
+        bot.reply_to(message, f"কোনো সমস্যা হয়েছে: {str(e)}")
 
-# বট চালু রাখার কমান্ড
 bot.polling()
