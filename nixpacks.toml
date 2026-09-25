@@ -1,2 +1,4 @@
+providers = ["python"]
+
 [phases.setup]
-nixPkgs = ["...", "apktool"]
+nixPkgs = ["python3", "apktool", "jre"]
